@@ -1,0 +1,53 @@
+---
+title: "cierres"
+author: "Maria, Gus, Luis & Cano"
+date: "2024-09-29"
+output: html_document
+---
+
+En este documento encontramos la tasa de supervivencia año con año de otros comercios no minoristas 
+
+``` {R}
+# Desactivamos la notación científica
+options(scipen = 999999)
+
+# Cargamos los paquetes que requerimos
+if (!require('pacman')) {
+  install.packages('pacman')
+}
+pacman::p_load(dplyr, data.table, tidyverse, ggplot2, sf, janitor, lubridate)
+
+```
+
+```{R}
+read_nofarm = function() {
+  dfs = list()
+  dirs_denues_nofarm = list.files("../raw/DENUEs/no_farm/")
+  for (i in 1:length(dirs_denues_nofarm)){
+    filename = paste0( "C:/Users/cano_/Dropbox/research/dataton/raw/DENUEs/no_farm/", dirs_denues_nofarm[i], "/denue_00_46111_csv/conjunto_de_datos/denue_inegi_46111_.csv")
+    df = data.frame(fread(filename) |> janitor::clean_names() |> select(nom_estab, per_ocu, entidad, cve_ent, municipio, cve_mun, localidad, manzana, tipo_vial, latitud, longitud, codigo_act, fecha_alta) |> mutate(date = make_date(year = as.numeric(substr(dirs_denues_nofarm[i], 18, 19)) + 2000, month = as.numeric(substr(dirs_denues_nofarm[i], 16, 17)), day = 1)))
+    dfs = rbind(dfs, df)
+  }
+  return(dfs)
+}
+
+denues_nofarm = read_nofarm()
+
+```
+
+``` {R}
+shares = list()
+for (i in 2016:2023){
+  curr = denues_nofarm[year(denues_nofarm$date) == i,]
+  nex = denues_nofarm[year(denues_nofarm$date) == (i+1),]
+  total_curr = sum(!is.na(curr$latitud))
+  total_next = sum(curr$latitud %in% nex$latitud & curr$longitud %in% nex$longitud)
+  shares = c(shares, total_next/total_curr)
+}
+
+plot(2016:2022, shares[1:(length(shares)-1)], type = "l", ylim = c(0,1))
+title("Supervivencia año con año de otros comercios no minoristas")
+
+```
+
+

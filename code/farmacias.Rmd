@@ -1,0 +1,129 @@
+---
+title: "farmacias"
+output: html_document
+date: "2024-09-14"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+# Farmacias 
+Este script genera y hace mapas de dos medidas de exstencia de farmacias para el DENUE 2024
+1. Farmacias (en general y de la ANTAD) por cada mil habitantes por sección electoral 
+2. Farmacias (en general y de la ANTAD) por kilómetro cuadrado por sección electoral
+
+```{r}
+# Desactivamos la notación científica
+options(scipen = 999999)
+
+# Cargamos los paquetes que requerimos
+if (!require('pacman')) {
+  install.packages('pacman')
+}
+pacman::p_load(readr, dplyr, tidyverse, data.table, ggplot2, units, stringr, sf, RColorBrewer, janitor, fixest)
+
+```
+
+Generamos una base de datos que adjunte las variables del censo a cada sección electoral
+```{R}
+#declaramos que se deben ignorar los polígonos no cerrados para evitar errores
+Sys.setenv(OGR_GEOMETRY_ACCEPT_UNCLOSED_RING = "NO") 
+
+# importamos los datos de las secciones electorales para 2024 y formateamos los nombres
+dir_shapefile = "../raw/shapefiles/SECCION.shp"
+secciones = st_read(dir_shapefile) |> janitor::clean_names() |> select(entidad, municipio, seccion, tipo, geometry)
+
+# importamos los datos del censo 2020 y formateamos los nombres 
+dir_censo = "../raw/censos/censo_2020/conjunto_de_datos/INE_SECCION_2020.csv"
+censo = fread(dir_censo) |> janitor::clean_names() |> select(entidad, municipio, seccion, tipo, pobtot, pob0_14, pob15_64, pob65_mas, pcon_disc, pocupada, psinder, tvivparhab, vph_c_serv)
+
+# Juntamos las secciones con los datos correspondientes del censo 
+mexico = left_join(secciones, censo,
+                       by = c("seccion" = "seccion",
+                              "entidad" = "entidad",
+                              "municipio" = "municipio")) |>
+  mutate(area_seccion_km2 = st_area(geometry)/1000) 
+```
+
+Generamos una base de datos que contenga todas las farmacias del DENUE 2024
+```{R}
+# Importamos los datos, filtramos las farmacias por código de actividad y tranformamos las coordenadas
+dir_farmacias = "../src/DENUEs/2024/denue_00_46321-46531_csv/conjunto_de_datos/denue_inegi_46321-46531_.csv"
+farmacias = fread(dir_farmacias) |> janitor::clean_names() |> select(nom_estab, per_ocu, entidad, cve_ent, municipio, cve_mun, localidad, manzana, tipo_vial, latitud, longitud, codigo_act, fecha_alta) |> filter(codigo_act == 464111 | codigo_act == 464112 ) |> st_as_sf(coords = c("longitud", "latitud"), crs = 4326) |> st_transform(st_crs(mexico))
+
+```
+
+Encontramos las farmacias por sección electoral 
+```{R}
+#farmacias_mexico = st_join(mexico, farmacias, suffix = c(".mex", ".farm"), join = st_contains) |> [order(farmacias_mexico$entidad.mex, farmacias_mexico$seccion),] |> mutate(dens_pob = pobtot/area_seccion_km2)
+
+farmacias_mexico = st_join(mexico, farmacias, suffix = c(".mex", ".farm"), join = st_contains) |> mutate(dens_pob = pobtot/area_seccion_km2)
+
+```
+
+Obtenemos medidas de la existencia de farmacias 
+```{R}
+num_farm_mex = farmacias_mexico |> group_by(entidad.mex, seccion) |> mutate(num_farms = sum(!is.na(nom_estab)) ) |> ungroup() |> mutate(farms_x_hab = num_farms/pobtot, farms_x_km2 = num_farms/area_seccion_km2) |> drop_na(nom_estab, num_farms, farms_x_hab, farms_x_km2) |> filter(num_farms > 0, farms_x_hab>0)
+
+``` 
+
+```{R}
+model = lm(num_farms ~ dens_pob, data = num_farm_mex)
+
+```
+
+```{R}
+summary(model)
+
+```
+
+Histogramas de las medidas
+```{R}
+ggplot(num_farm_mex, aes(num_farms)) +
+  geom_histogram(binwidth = 1, aes(y=..density..))
+
+ggplot(num_farm_mex, aes(farms_x_hab)) +
+  geom_histogram(binwidth = 0.001, aes(y=..density..))
+
+ggplot(num_farm_mex, aes(farms_x_km2)) +
+  geom_histogram(binwidth = 0.01, aes(y=..density..))
+
+ggplot(num_farm_mex, aes(dens_pob)) +
+  geom_histogram(binwidth = 0.1, aes(y=..density..))
+
+```
+
+Scatterplots de las medidas 
+```{R}
+num_farm_mex |> ggplot( aes(x = dens_pob, y = num_farms) ) + geom_point(alpha=0.5) + geom_smooth(method=lm)
+
+```
+
+
+Mapas de farmacias por sección electoral
+```{R}
+
+p = ggplot()+
+  geom_sf(data = num_farm_mex, aes(fill = num_farms), color = "grey80") +
+  scale_fill_gradient(low = "white", high = "#750014", na.value = "deepskyblue2")+
+  labs(fill = "Numero de farmacias") +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+ggsave(paste0("../graphs/farmacias_mexico.png"), plot = p, width = 11, height = 11, units = "in", dpi = 1000)
+
+for (i in 1:32){
+  farmacias_entidad = filter(num_farm_mex, entidad.mex == i)
+  p = ggplot()+
+    geom_sf(data = farmacias_entidad, aes(fill = num_farms), color = "grey80")+
+    scale_fill_gradient(low = "white", high = "#750014", na.value = "deepskyblue2")+
+    labs(fill = "Numero de farmacias") +
+    theme_minimal()+
+    theme(legend.position = "bottom")
+  ggsave(paste0("../graphs/farmacias_", i, ".png"), plot = p, width = 11, height = 11, units = "in", dpi = 750)
+}
+
+```
+
+
+

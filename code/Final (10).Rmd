@@ -1,0 +1,303 @@
+---
+title: "Dadatonlimpio_concentradohogar"
+output: html_document
+date: "2024-09-16"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Paso 1
+importar data y llamarlo contrentradohog
+
+### Paso 2
+instalar librerias y repositorios 
+```{r}
+options(scipen = 9999)
+
+if (!require("pacman")) install.packages("pacman", repos = "https://cloud.r-project.org/")
+pacman::p_load(dplyr, tidyr, rvest, ggmap, ggplot2, plotly, htmlwidgets, stringi, RColorBrewer, sf, stringr, readr, readxl)  # Puedes agregar más paquetes aquí
+
+```
+
+## Paso 3
+Agrupar la información del promedio del gasto en medicinas agrupado por codigo municipal
+
+```{r}
+concentradohog <- read.csv("C:/Users/RAM/OneDrive/Escritorio/DATATON/DATATON limpio/ENIGH/conjunto_de_datos_enigh_ns_2022_csv/conjunto_de_datos_concentradohogar_enigh2022_ns/conjunto_de_datos/conjunto_de_datos_concentradohogar_enigh2022_ns.csv")
+
+prom_gastomeds <- concentradohog %>%
+  group_by(ubica_geo) %>%
+  summarise(promedio_gasto = mean(medicinas, na.rm = TRUE))
+
+View(prom_gastomeds)
+```
+
+## Paso 4
+hacer eso un csv para seguir tarbajando con el 
+```{r}
+write.csv(prom_gastomeds, "prom_gastomeds.csv", row.names=TRUE)
+```
+
+## Segunda variable para la regresion: ingreso
+Cargar los csvs (uno del enigh y el otro es el iccm)
+
+```{r}
+icmm <- read_excel("C:/Users/RAM/OneDrive/Escritorio/DATATON/DATATON limpio/INEGI ICMM/icmm_2020_tabulados.xlsx")
+
+icmm_clean <- icmm %>%
+  filter(!(Estimador %in% c("Error estándar", "Límite inferior de confianza", "Límite superior de confianza", "Coeficiente de variación (%)")) &
+         !grepl("total", Municipio, ignore.case = TRUE))
+View(icmm_clean)
+
+```
+## Mapas
+```{r}
+Sys.setenv(OGR_GEOMETRY_ACCEPT_UNCLOSED_RING = "NO")
+shapefile = st_read("C:/Users/RAM/OneDrive/Escritorio/DATATON/DATATON limpio/mun21gw/mun21gw.shp")
+```
+
+```{r}
+png("mapamex.png", width = 800, height = 600) 
+
+ggplot()+
+geom_sf(data = shapefile,
+color = "pink",
+fill = "white",
+size = 0.1)+
+theme_minimal()
+
+```
+
+
+## Regresion lineal nivel de ingresos vs gasto en medicina
+
+Variable dependiente: gasto en medicinas 
+Variuable independiente: ingreso
+
+## Hacer una columna en comun para ambas bases de datos 
+
+# Quitar acentos y puntos
+```{r}
+icmm_clean$Municipio <- stri_trans_general(icmm_clean$Municipio, "Latin-ASCII")
+
+
+icmm_clean$Municipio <- gsub("[^0-9]", "", icmm_clean$Municipio)
+```
+
+
+#Modificar iccm_clean para que la clave de la entidad federativa este unida con el codigo de municipio
+```{r}
+icmm_clean$combined <- str_c(str_sub(icmm_clean$`Entidad federativa`, 1, 2), str_sub(icmm_clean$Municipio, 1, 3))
+
+icmm_clean$combined <- str_sub(icmm_clean$combined, 2)
+```
+
+
+```{r}
+names(prom_gastomeds)[names(prom_gastomeds) == "ubica_geo"] <- "combined"
+
+```
+
+
+#Combinar 
+
+```{r}
+regresion <- merge(prom_gastomeds,icmm_clean,by="combined") 
+View(regresion)
+```
+
+# regresion
+```{r}
+regresion %>% lm(promedio_gasto ~ `Ingreso Corriente Promedio Trimestral por Hogar 20201`, data = .) %>% summary()
+```
+
+```{r}
+model <- lm(promedio_gasto ~ `Ingreso Corriente Promedio Trimestral por Hogar 20201`, data = regresion)
+```
+
+
+# Plot 
+```{r}
+
+ plot(regresion$`Ingreso Corriente Promedio Trimestral por Hogar 20201`, regresion$promedio_gasto, 
+     main = "Regresion", 
+     xlab = "Ingreso Corriente Promedio Trimestral por Hogar 20201", 
+     ylab = "promedio_gasto")
+
+abline(model, col="hotpink")
+
+
+
+```
+```{r}
+png("regesion.png", width = 800, height = 600) 
+```
+
+
+# Histograma 
+```{r}
+# Using dplyr's rename function
+regresion <- regresion %>%
+    rename(IngresoCorriente = `Ingreso Corriente Promedio Trimestral por Hogar 20201`)
+```
+```{r}
+ggplot(regresion, aes(x = `IngresoCorriente`)) +
+  geom_histogram(binwidth = 1000, fill = "pink", color = "black") +
+  labs(title = "Histogram of Ingreso Corriente Promedio Trimestral por Hogar",
+       x = "IngresoCorriente",
+       y = "Frequency")
+
+```
+```{r}
+ggplot(regresion, aes(x = IngresoCorriente)) +
+     geom_histogram(binwidth = 1000, fill = "pink", color = "black") +
+     labs(title = "Histogram of Ingreso Corriente",
+          x = "Ingreso Corriente",
+          y = "Frequency")
+```
+```{r}
+names(regresion)
+str(regresion)
+colnames(regresion)
+```
+
+ggplot(regresion, aes(x = promedio_gasto)) +
+  geom_histogram(binwidth = 100, fill = "blue", color = "black") +
+  labs(title = "Histogram of Promedio Gasto",
+       x = "Promedio Gasto",
+       y = "Frequency")
+       
+```{r}
+str(regresion)
+
+colnames(regresion)
+
+head(regresion)
+
+
+ggplot(regresion, aes(x = IngresoCorriente, y = promedio_gasto)) +
+  geom_bin2d() +
+  labs(title = "2D Histogram of Ingreso Corriente vs Promedio Gasto",
+       x = "Ingreso Corriente",
+       y = "Promedio Gasto") +
+  scale_fill_gradient(low = "white", high = "pink")
+```
+
+
+``` {R}
+png("histograma_promgastoxingreso.png", width = 800, height = 600)
+```
+
+```{r}
+COVID19 <- read.csv("C:/Users/RAM/OneDrive/Escritorio/DATATON/DATATON limpio/COVID19MEXICO.csv", header = TRUE)
+```
+
+
+# DENUE hosp. privados 
+```{r}
+hosp_priv <- read.csv("C:/Users/RAM/OneDrive/Escritorio/DATATON/DATATON limpio/denue_inegi_62_.csv", header = TRUE)
+```
+
+```{r}
+
+hosp_priv_filtrado <- hosp_priv[hosp_priv$codigo_act == 622111, ]
+
+```
+
+#Mapa 
+```{r}
+Sys.setenv(OGR_GEOMETRY_ACCEPT_UNCLOSED_RING = "NO")
+shapefile = st_read("C:/Users/RAM/OneDrive/Escritorio/DATATON/DATATON limpio/mun21gw/mun21gw.shp")
+```
+```{r}
+png("mapamex.png", width = 800, height = 600) 
+```
+
+
+```{r}
+ggplot()+
+geom_sf(data = shapefile,
+color = "pink",
+fill = "white",
+size = 0.1)+
+theme_minimal()
+
+```
+
+```{r}
+shapefile_data <- st_read("C:/Users/RAM/OneDrive/Escritorio/DATATON/DATATON limpio/mun21gw/mun21gw.shp")
+
+# Graficar el shapefile y los puntos de los hospitales
+mapa <- ggplot() +
+  geom_sf(data = shapefile_data, fill = "lightblue", color = "black") +  # Mapa base del shapefile
+  geom_point(data = hosp_priv_filtrado, aes(x = longitud, y = latitud), 
+             color = "darkorchid1", size = 0.1, alpha = 0.7) +  # Puntos de los hospitales
+  labs(title = "Hospitales Privados en México", x = "Longitud", y = "Latitud")
+
+# Step 3: Convert the ggplot object to an interactive plotly object
+interactive_map <- ggplotly(mapa)
+
+mapa
+
+```
+
+```{r}
+saveWidget(interactive_map, "mapa hosp_priv", selfcontained = TRUE)
+```
+
+```{r}
+Dist <- read.csv("C:/Users/RAM/OneDrive/Escritorio/DATATON/DATATON limpio/DATATONLIMPIO/Dist.csv", fileEncoding = "latin1")
+
+View(Dist)
+```
+
+```{r}
+shapefile_data <- st_read("C:/Users/RAM/OneDrive/Escritorio/DATATON/DATATON limpio/mun21gw/mun21gw.shp")
+
+# Graficar el shapefile y los puntos de los hospitales
+mapa_dist <- ggplot() +
+  geom_sf(data = shapefile_data, fill = "lightblue", color = "black") +  # Mapa base del shapefile
+  geom_point(data = Dist, aes(x = longitud, y = latitud), 
+             color = "darkorchid1", size = 0.1, alpha = 0.7) 
+  labs(title = "Distribuidoras", x = "Longitud", y = "Latitud")
+  
+print(mapa_dist)
+
+```
+
+## Mapa de farmacias final 
+```{r}
+lista_farm <- read.csv("C:/Users/RAM/OneDrive/Escritorio/DATATON/DATATON limpio/DATATONLIMPIO/lista_farm.csv")
+
+View(lista_farm)
+```
+
+```{r}
+shapefile_data <- st_read("C:/Users/RAM/OneDrive/Escritorio/DATATON/DATATON limpio/mun21gw/mun21gw.shp")
+
+# Graficar el shapefile y los puntos de los hospitales
+mapa_farm <- ggplot() +
+  geom_sf(data = shapefile_data, fill = "white", color = "black") +  # Mapa base del shapefile
+  geom_point(data = lista_farm, aes(x = longitud, y = latitud), 
+             color = "red", size = 0.1, alpha = 0.7) 
+  labs(title = "Farmacias", x = "Longitud", y = "Latitud")
+  
+print(mapa_farm)
+
+ggsave("C:/Users/RAM/OneDrive/Escritorio/DATATON/DATATON limpio/DATATONLIMPIO/mapafarmas.png", 
+       plot = mapa_farm, width = 10, height = 8, dpi = 300)
+
+interactive_map <- ggplotly(mapa_farm)
+
+mapa_farm
+
+```
+
+```{r}
+saveWidget(interactive_map, "C:/Users/RAM/OneDrive/Escritorio/DATATON/DATATON limpio/DATATONLIMPIO/mapafarmas_interactivo.html")
+```
+
+
+

@@ -1,0 +1,428 @@
+---
+title: "tasa de supervencia de farmacias"
+output: html_document
+date: "2024-20-14"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+```{r}
+# Desactivamos la notación científica
+options(scipen = 999999)
+
+# Cargamos los paquetes que requerimos
+if (!require('pacman')) {
+  install.packages('pacman')
+}
+pacman::p_load(dplyr, tidyverse, data.table, ggplot2, sf, janitor, plotly)
+
+```
+
+```{R}
+read_and_filter = function(filename){
+  df = fread(filename) |> janitor::clean_names() |> select(nom_estab, per_ocu, entidad, cve_ent, municipio, cve_mun, localidad, manzana, tipo_vial, latitud, longitud, codigo_act, fecha_alta) |> filter(codigo_act == 464111 | codigo_act == 464112) 
+}
+
+filenames = paste0("C:/Users/cano_/Dropbox/research/dataton/raw/DENUEs/", 2015:2024, "/conjunto_de_datos/denue_inegi_46321-46531_.csv")
+
+denues_farm = lapply(filenames, read_and_filter)
+
+```
+```{R}
+#Calculamos el numero de farmacias que se incluye
+calculate_num_farms = function(denue){
+  num_farm = sum(!is.na(denue$longitud)) 
+}
+
+years = 2015:2024
+
+num_farms = unlist(lapply(denues_farm, calculate_num_farms))
+df_farms = data.frame(years, num_farms)
+
+model_farms_completo = lm(df_farms$num_farms ~ df_farms$years)
+
+model_farms_antesvsdespues = lm(df_farms$num_farms[years<=2019] ~ df_farms$years[years<=2019])
+
+plot(years, num_farms, type="l", xlab = "Año", ylab = "Número de farmacias")
+abline(model_farms_completo)
+title("Número esperado vs. número observado de farmacias")
+
+plot(years, num_farms, type="l", xlab = "Año", ylab = "Número de farmacias")
+abline(model_farms_antesvsdespues)
+title("Número de farmacias en el DENUE vs. predicción 2015-2019")
+
+
+```
+
+
+```{R}
+survivors_total = list()
+survivors_share = list()
+
+for (i in 1:(length(denues_farm)-2)){
+  total = c( dim(denues_farm[[i]])[1] )
+  
+  for (j in (i+1):length(denues_farm)){
+    total = c(total, sum(denues_farm[[i]]$latitud %in% denues_farm[[j]]$latitud & denues_farm[[i]]$longitud %in% denues_farm[[j]]$longitud))
+  }
+  share = total/total[1]
+  
+  survivors_total[[i]] = total
+  survivors_share[[i]] = share
+}
+
+
+```
+
+
+```{R}
+plot(2015:2024, survivors_share[[1]], type = "l", xlab = "Year", ylab = "% Farmacias")
+title('Porcentaje de farmacias de 2015 presentes en cada año posterior')
+
+plot(2016:2024, survivors_share[[2]], type = "l", xlab = "Year", ylab = "% Farmacias")
+title('Porcentaje de farmacias de 2016 presentes en cada año posterior')
+
+plot(2019:2024, survivors_share[[5]], type = "l", xlab = "Year", ylab = "% Farmacias")
+title('Porcentaje de farmacias de 2019 presentes en cada año posterior')
+
+plot(2020:2024, survivors_share[[6]], type = "l", xlab = "Year", ylab = "% Farmacias")
+title('Porcentaje de farmacias de 2020 presentes en cada año posterior')
+
+```
+
+
+```{R}
+#noroeste: bc, bcs, chi, dur, sin, son
+#noreste: coah, nl, tam
+#occidente: nay, jal, col, mich
+#oriente: pue, ver, tla, hid
+#centronorte: ag, gua, slp, zac, que
+#centrosur: mor, edo, cdmx
+#suroeste: guer, oax, chi
+#sureste: tab, cam, qroo, yuc
+
+noroeste = c(2,3,8,10,25,26)
+noreste = c(5,19,28)
+occidente = c(18,14,6,16)
+oriente = c(30, 21, 29, 13)
+centronorte = c(1,11, 24, 32, 22)
+centrosur = c(17, 9, 15)
+suroeste = c(12,20,7)
+sureste = c(27,4,23,31)
+
+for(i in 1:length(denues_farm)){
+  denues_farm[[i]]$region = with(denues_farm[[i]], ifelse(cve_ent %in% noroeste, "noroeste", ifelse(cve_ent %in% noreste, "noreste", ifelse(cve_ent %in% occidente, "occidente", ifelse(cve_ent %in% oriente, "oriente", ifelse(cve_ent %in% centronorte, "centronorte", ifelse(cve_ent %in% centrosur, "centrosur", ifelse(cve_ent %in% suroeste, "suroeste", ifelse(cve_ent %in% sureste, "sureste", ifelse("none") )))))))))
+  denues_farm[[i]]$region = factor(denues_farm[[i]]$region)
+}
+
+```
+
+```{R}
+total_survivors = list()
+prop_survivors = list()
+
+for (j in 1:( length(denues_farm)-2 )){
+  denue = denues_farm[[j]]
+  totales_añobase = list()
+  proporciones_añobase = list()
+  for (r in levels(denue$region)){
+    denue_base = denue |> filter(region == r)
+    
+    totales_region = c(dim(denue_base)[1] )
+  
+    for (i in (j+1):length(denues_farm)){
+      denue_comparacion = denues_farm[[i]] |> filter(region == r)
+      totales_region = c(totales_region, sum(denue_base$latitud %in% denue_comparacion$latitud & denue_base$longitud %in% denue_comparacion$longitud ) )
+    }
+    prop_region = totales_region / totales_region[1]
+    
+    totales_añobase[[r]] = totales_region
+    proporciones_añobase[[r]] = prop_region
+  }
+  year = paste0(2014+j)
+  total_survivors[[year]] = totales_añobase
+  prop_survivors[[year]] = proporciones_añobase
+}
+
+```
+
+
+```{R}
+for (y in c(2015,2016, 2019, 2020)){
+  png(paste0("../output/graphs/supervivencia_regional_", y,".png"))
+  data = prop_survivors[[as.character(y)]]
+  years = y:2024
+  plot(years, data$centronorte, type = "l", col = 2, xlab = "Year", ylab = "% farmacias", xlim = c(y, 2024), ylim = c(0,1))
+  lines(years, data$centrosur, type = "l", col = 3)
+  lines(years, data$noreste, type = "l", col = 4)
+  lines(years,data$noroeste, type = "l", col = 5)
+  lines(years,data$occidente, type = "l", col = 6)
+  lines(years, data$oriente, type = "l",  col = 7)
+  lines(years, data$sureste, type = "l", col = 8)
+  lines(years, data$suroeste, type = "l",  col = 9)
+  title(paste0('Porcentaje de farmacias de ', y,' presentes después'))
+  legend("topright", c("centronorte", "centrosur", "noreste", "noroeste", "occidente", "oriente", "sureste", "suroeste"), lty = 1, cex = 0.7, col = 2:9)
+
+dev.off()
+}
+```
+
+
+Ahora calculamos la tasa de supervivencia año con año
+```{R}
+# luego calculamos cuántas del año presente estaban el año siguiente
+# sobrevivieron al siguiente año?
+shares = list()
+
+for (i in 1:(length(denues_farm)-1)){
+  total_curr = sum(!is.na(denues_farm[[i]]$latitud))
+  total_next = sum(denues_farm[[i]]$latitud %in% denues_farm[[(i+1)]]$latitud & denues_farm[[i]]$longitud %in% denues_farm[[(i+1)]]$longitud)
+  shares = c(shares, total_next/total_curr)
+}
+
+plot(2015:2023, shares, type = "l", xlim = c(2015,2023), ylim = c(0,1))
+title("Supervivencia año con año")
+
+```
+
+Como el número de farmacias es relativamente estable entre 2016 y 2018, y entre 2021 y 2024, analizamos qué factores hacen que las farmacias se mantengan estables entre esos años 
+
+Generamos una base de datos que adjunte las variables del censo a cada sección electoral
+```{R}
+#declaramos que se deben ignorar los polígonos no cerrados para evitar errores
+Sys.setenv(OGR_GEOMETRY_ACCEPT_UNCLOSED_RING = "NO") 
+
+# importamos los datos de las secciones electorales para 2024 y formateamos los nombres
+dir_shapefile = "../raw/shapefiles/SECCION.shp"
+secciones = st_read(dir_shapefile) |> janitor::clean_names() |> select(entidad, municipio, seccion, tipo, geometry)
+
+# importamos los datos del censo 2020 y formateamos los nombres 
+dir_censo = "../raw/censos/censo_2020/conjunto_de_datos/INE_SECCION_2020.csv"
+censo = fread(dir_censo) |> janitor::clean_names() |> mutate(porcen_nin_anc = (pobtot - pob15_64)/pobtot , porcen_disc = pcon_disc / pobtot, porcen_pocu = pocupada/pobtot, porcen_noafilsalud = psinder / pobtot, porcen_vivipart_servi = vph_c_serv / tvivparhab) |> select(entidad, municipio, seccion, pobtot, porcen_nin_anc, porcen_disc, porcen_pocu, porcen_noafilsalud, porcen_vivipart_servi)
+
+# Juntamos las secciones con los datos correspondientes del censo 
+mexico = left_join(secciones, censo,
+                       by = c("seccion" = "seccion",
+                              "entidad" = "entidad",
+                              "municipio" = "municipio")) |>
+  mutate(area_seccion_km2 = st_area(geometry)/1000) 
+
+mexico = mexico[order(mexico$entidad, mexico$municipio, mexico$seccion),]
+```
+
+```{R}
+dir_enigh_2016 = "../raw/enigh/2016/concentradohogar.csv"
+enigh_2016 = fread(dir_enigh_2016) |> janitor::clean_names() |> select(ubica_geo, ing_cor, medicinas, salud)
+enigh_2016 = enigh_2016[order(enigh_2016$ubica_geo), ] |> mutate(cve_ent = ifelse(str_count(ubica_geo, "\\d") == 8, as.numeric(substring(ubica_geo, 1, 1)), as.numeric(substring(ubica_geo, 1, 2))),  cve_mun = ifelse(str_count(ubica_geo, "\\d") == 8, as.numeric(substring(ubica_geo, 2, 4)), as.numeric(substring(ubica_geo, 3, 5)))) |> group_by(cve_ent, cve_mun) |> summarize(ing_prom = mean(ing_cor), gas_med = mean(medicinas), gas_sal = mean(salud) ) |> ungroup() 
+
+dir_enigh_2022 = "../raw/enigh/2022/concentradohogar.csv"
+enigh_2022 = fread(dir_enigh_2022) |> janitor::clean_names() |> select(ubica_geo, ing_cor, medicinas, salud)
+enigh_2022 = enigh_2022[order(enigh_2022$ubica_geo), ] |> mutate(cve_ent = ifelse(str_count(ubica_geo, "\\d") == 8, as.numeric(substring(ubica_geo, 1, 1)), as.numeric(substring(ubica_geo, 1, 2))),  cve_mun = ifelse(str_count(ubica_geo, "\\d") == 8, as.numeric(substring(ubica_geo, 2, 4)), as.numeric(substring(ubica_geo, 3, 5)))) |> group_by(cve_ent, cve_mun) |> summarize(ing_prom = mean(ing_cor), gas_med = mean(medicinas), gas_sal = mean(salud)) |> ungroup() 
+
+```
+
+```{R}
+mexico_2016 = left_join(mexico, enigh_2016,
+                        by = c("entidad" = "cve_ent",
+                               "municipio" = "cve_mun")) 
+mexico_2016 = mexico_2016[order(mexico_2016$entidad, mexico_2016$municipio, mexico_2016$seccion), ]
+
+mexico_2022 = left_join(mexico, enigh_2022,
+                        by = c("entidad" = "cve_ent",
+                               "municipio" = "cve_mun"))
+mexico_2022 = mexico_2022[order(mexico_2022$entidad, mexico_2022$municipio, mexico_2022$seccion), ]
+
+```
+
+```{R}
+#agregamos una dummy indicando si la farmacia presente en el primer año, también lo está en el último 
+denue_2016 = denues_farm[[2]]
+denue_2018 = denues_farm[[4]]
+denue_2021 = denues_farm[[7]]
+denue_2024 = denues_farm[[10]]
+
+denue_2016 = cbind(denue_2016, superv = as.numeric(denue_2016$latitud %in% denue_2018$latitud & denue_2016$longitud %in% denue_2018$longitud))
+
+denue_2021 = cbind(denue_2021, superv = as.numeric(denue_2021$latitud %in% denue_2024$latitud & denue_2021$longitud %in% denue_2024$longitud))
+
+```
+
+```{R}
+# modificamos la proyección de las coordenadas para que coincidan 
+denue_2016 = denue_2016 |> st_as_sf(coords = c("longitud", "latitud"), crs = 4326) |> st_transform(st_crs(mexico)) 
+farmacias_2016 = st_join(mexico_2016, denue_2016, suffix = c(".mex", ".den"), join = st_contains) 
+
+#obtenemos la tasa de supervivencia por sección electoral 
+farmacias_2016 = farmacias_2016 |> group_by(entidad.mex, seccion) |> mutate(num_farms_seccion = sum(!is.na(nom_estab)), tasa_superv_seccion = mean(superv) ) |> ungroup() |> group_by(entidad.mex) |> mutate(num_farms_ent = sum(!is.na(nom_estab)), tasa_superv_ent = mean(superv) ) |> ungroup() 
+
+```
+
+```{R}
+ggplot()+
+  geom_sf(data = farmacias_2016, aes(fill = tasa_superv_ent), color = "grey80") +
+  scale_fill_gradient(low = "white", high = "#750014", na.value = "deepskyblue2")+
+  labs(fill = "Tasa de supervivencia de farmacias") +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+#ggsave(paste0("../graphs/farmacias_mexico.png"), plot = p, width = 11, height = 11, units = "in", dpi = 1000)
+
+```
+
+
+```{R}
+plot(farmacias_2016$porcen_nin_anc, farmacias_2016$tasa_superv_seccion)
+model_nin_anc = lm(farmacias_2016$tasa_superv_seccion ~ farmacias_2016$porcen_nin_anc)
+abline(model_nin_anc)
+title("Tasa de supervivencia vs. población de 15 y menos y de 64 años y más")
+
+plot(farmacias_2016$porcen_disc, farmacias_2016$tasa_superv_seccion)
+model_disc = lm(farmacias_2016$tasa_superv_seccion ~ farmacias_2016$porcen_disc)
+abline(model_disc)
+title("Tasa de supervivencia vs. porcentaje de población discapacitada")
+
+plot(farmacias_2016$porcen_noafilsalud, farmacias_2016$tasa_superv_seccion)
+model_noafilsalud = lm(farmacias_2016$tasa_superv_seccion ~ farmacias_2016$porcen_noafilsalud)
+abline(model_noafilsalud)
+title("Tasa de supervivencia vs. porcentaje de población no afiliada a servicios de salud")
+
+plot(farmacias_2016$porcen_pocu, farmacias_2016$tasa_superv_seccion)
+model_pocu = lm(farmacias_2016$tasa_superv_seccion ~ farmacias_2016$porcen_pocu)
+abline(model_pocu)
+title("Tasa de supervivencia vs. porcentaje de población ocupada")
+
+plot(farmacias_2016$ing_prom, farmacias_2016$tasa_superv_seccion)
+model_ing = lm(farmacias_2016$tasa_superv_seccion ~ farmacias_2016$ing_prom)
+abline(model_ing)
+title("Tasa de supervivencia vs. ingreso promedio")
+
+plot(farmacias_2016$gas_med, farmacias_2016$tasa_superv_seccion)
+model_med = lm(farmacias_2016$tasa_superv_seccion ~ farmacias_2016$gas_med)
+abline(model_med)
+title("Tasa de supervivencia vs. gasto en medicinas sin receta")
+
+plot(farmacias_2016$gas_sal, farmacias_2016$tasa_superv_seccion)
+model_sal = lm(farmacias_2016$tasa_superv_seccion ~ farmacias_2016$gas_sal)
+abline(model_sal)
+title("Tasa de supervivencia vs. gasto en salud")
+
+plot_ly(x = farmacias_2016$entidad.mex, y = farmacias_2016$tasa_superv_ent, type = "bar")
+
+```
+
+
+```{R}
+print(model_disc)
+print(model_noafilsalud)
+print(model_med)
+print(model_nin_anc)
+print(model_pocu)
+print(model_sal)
+print(model_ing)
+```
+
+```{R}
+ggplot(farmacias_2016, aes(x = porcen_nin_anc, y = tasa_superv_seccion))+
+  stat_bin2d(bins = 25) 
+ggplot(farmacias_2016, aes(x = porcen_disc, y = tasa_superv_seccion))+
+  stat_bin2d(bins = 25) 
+ggplot(farmacias_2016, aes(x = porcen_pocu, y = tasa_superv_seccion))+
+  stat_bin2d(bins = 25) 
+ggplot(farmacias_2016, aes(x = porcen_noafilsalud, y = tasa_superv_seccion))+
+  stat_bin2d(bins = 25) 
+ggplot(farmacias_2016, aes(x = gas_med, y = tasa_superv_seccion))+
+  stat_bin2d(bins = 25) 
+ggplot(farmacias_2016, aes(x = gas_sal, y = tasa_superv_seccion))+
+  stat_bin2d(bins = 25) 
+ggplot(farmacias_2016, aes(x = ing_prom, y = tasa_superv_seccion))+
+  stat_bin2d(bins = 25) 
+```
+
+```{R}
+ggplot(farmacias_2016, aes(x = porcen_nin_anc, y = tasa_superv_seccion))+
+  stat_bin2d(bins = 25) 
+ggplot(farmacias_2016, aes(x = porcen_disc, y = tasa_superv_seccion))+
+  stat_bin2d(bins = 25) 
+ggplot(farmacias_2016, aes(x = porcen_pocu, y = tasa_superv_seccion))+
+  stat_bin2d(bins = 25) 
+ggplot(farmacias_2016, aes(x = porcen_noafilsalud, y = tasa_superv_seccion))+
+  stat_bin2d(bins = 25) 
+ggplot(farmacias_2016, aes(x = gas_med, y = tasa_superv_seccion))+
+  stat_bin2d(bins = 25) 
+ggplot(farmacias_2016, aes(x = gas_sal, y = tasa_superv_seccion))+
+  stat_bin2d(bins = 25) 
+ggplot(farmacias_2016, aes(x = ing_prom, y = tasa_superv_seccion))+
+  stat_bin2d(bins = 25) 
+```
+
+```{R}
+plot(farmacias_2016$porcen_nin_anc, farmacias_2016$num_farms_seccion)
+model_nin_anc = lm(farmacias_2016$num_farms_seccion ~ farmacias_2016$porcen_nin_anc)
+abline(model_nin_anc)
+title("Tasa de supervivencia vs. población de 15 y menos y de 64 años y más")
+
+plot(farmacias_2016$porcen_disc, farmacias_2016$num_farms_seccion)
+model_disc = lm(farmacias_2016$num_farms_seccion ~ farmacias_2016$porcen_disc)
+abline(model_disc)
+title("Tasa de supervivencia vs. porcentaje de población discapacitada")
+
+plot(farmacias_2016$porcen_noafilsalud, farmacias_2016$num_farms_seccion)
+model_noafilsalud = lm(farmacias_2016$num_farms_seccion ~ farmacias_2016$porcen_noafilsalud)
+abline(model_noafilsalud)
+title("Tasa de supervivencia vs. porcentaje de población no afiliada a servicios de salud")
+
+plot(farmacias_2016$porcen_pocu, farmacias_2016$num_farms_seccion)
+model_pocu = lm(farmacias_2016$num_farms_seccion ~ farmacias_2016$porcen_pocu)
+abline(model_pocu)
+title("Tasa de supervivencia vs. porcentaje de población ocupada")
+
+plot(farmacias_2016$ing_prom, farmacias_2016$num_farms_seccion)
+model_ing = lm(farmacias_2016$num_farms_seccion ~ farmacias_2016$ing_prom)
+abline(model_ing)
+title("Tasa de supervivencia vs. ingreso promedio")
+
+plot(farmacias_2016$gas_med, farmacias_2016$num_farms_seccion)
+model_med = lm(farmacias_2016$num_farms_seccion ~ farmacias_2016$gas_med)
+abline(model_med)
+title("Tasa de supervivencia vs. gasto en medicinas sin receta")
+
+plot(farmacias_2016$gas_sal, farmacias_2016$num_farms_seccion)
+model_sal = lm(farmacias_2016$num_farms_seccion ~ farmacias_2016$gas_sal)
+abline(model_sal)
+title("Tasa de supervivencia vs. gasto en salud")
+
+plot_ly(x = farmacias_2016$entidad.mex, y = farmacias_2016$num_farms_ent, type = "bar")
+
+```
+
+
+```{R}
+print(model_disc)
+print(model_noafilsalud)
+print(model_med)
+print(model_nin_anc)
+print(model_pocu)
+print(model_sal)
+print(model_ing)
+```
+
+```{R}
+ggplot(farmacias_2016, aes(x = porcen_nin_anc, y = tasa_superv_seccion))+
+  stat_bin2d(bins = 25) 
+ggplot(farmacias_2016, aes(x = porcen_disc, y = tasa_superv_seccion))+
+  stat_bin2d(bins = 25) 
+ggplot(farmacias_2016, aes(x = porcen_pocu, y = tasa_superv_seccion))+
+  stat_bin2d(bins = 25) 
+ggplot(farmacias_2016, aes(x = porcen_noafilsalud, y = tasa_superv_seccion))+
+  stat_bin2d(bins = 25) 
+ggplot(farmacias_2016, aes(x = gas_med, y = tasa_superv_seccion))+
+  stat_bin2d(bins = 25) 
+ggplot(farmacias_2016, aes(x = gas_sal, y = tasa_superv_seccion))+
+  stat_bin2d(bins = 25) 
+ggplot(farmacias_2016, aes(x = ing_prom, y = tasa_superv_seccion))+
+  stat_bin2d(bins = 25) 
+```
+
+
+

@@ -1,0 +1,34 @@
+---
+title: "format_2015"
+output: html_document
+date: "2024-20-14"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+Formateamos el nombre de las columnas de 2015 para poder usarlo en el análisis 
+
+```{r}
+# Desactivamos la notación científica
+options(scipen = 999999)
+
+# Cargamos los paquetes que requerimos
+if (!require('pacman')) {
+  install.packages('pacman')
+}
+pacman::p_load(dplyr, tidyverse, data.table, ggplot2, sf, janitor)
+
+```
+
+
+```{R}
+file_2016 = "C:/Users/cano_/Dropbox/research/dataton/raw/DENUEs/2016/conjunto_de_datos/denue_inegi_46321-46531_.csv"
+df_2016 = fread(file_2016) |> janitor::clean_names()
+cols = colnames(df_2016)
+
+file_2015 = "C:/Users/cano_/Dropbox/research/dataton/raw/DENUEs/2015/conjunto_de_datos/denue_inegi_46321-46531_.csv"
+df_2015 = fread(file_2015)
+colnames(df_2015) = cols
+
+write_csv(df_2015, file_2015)

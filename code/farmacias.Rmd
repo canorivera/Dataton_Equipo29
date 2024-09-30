@@ -9,9 +9,7 @@ output:
 ---
 
 # Farmacias 
-Este script genera y hace mapas de dos medidas de exstencia de farmacias para el DENUE 2024
-1. Farmacias (en general y de la ANTAD) por cada mil habitantes por sección electoral 
-2. Farmacias (en general y de la ANTAD) por kilómetro cuadrado por sección electoral
+Este script genera, corre regresiones sobre e ilustra de tres medidas de existencia de farmacias: número de farmacias, número de farmacias por habitante, número de farmacias por kilómetro cuadrado, 
 
 ```{r}
 # Desactivamos la notación científica
@@ -70,13 +68,10 @@ num_farm_mex = farmacias_mexico |> group_by(entidad.mex, seccion) |> mutate(num_
 
 ```{R}
 model = lm(num_farms ~ dens_pob, data = num_farm_mex)
-
-```
-
-```{R}
 summary(model)
 
 ```
+
 
 Histogramas de las medidas
 ```{R}

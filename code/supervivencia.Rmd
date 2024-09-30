@@ -8,6 +8,8 @@ output:
   pdf_document: default
 ---
 
+Este script genera, corre regresiones sobre e ilustra de dos medidas de existencia de farmacias: tasa de supervivencia año con año y tasa de supervivencia de farmacias existentes un año respecto a los siguientes años 
+
 ```{r}
 # Desactivamos la notación científica
 options(scipen = 999999)

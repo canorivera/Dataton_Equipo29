@@ -1,0 +1,134 @@
+
+```{r}
+options(scipen = 9999)
+
+if (!require("pacman")) install.packages("pacman", repos = "https://cloud.r-project.org/")
+pacman::p_load(dplyr, tidyr, rvest, ggmap, ggplot2, plotly, htmlwidgets, stringi, RColorBrewer, sf, stringr, readr, readxl)  # Puedes agregar más paquetes aquí
+
+
+```
+
+
+# Leer el ENIGH
+```{r}
+concentradohog <- read.csv("../raw/ENIGH/2022/concentradohogar.csv")
+
+prom_gastomeds <- concentradohog %>%
+  group_by(ubica_geo) %>%
+  summarise(promedio_gasto = mean(medicinas, na.rm = TRUE))
+
+write.csv(prom_gastomeds, "prom_gastomeds.csv", row.names=TRUE)
+
+```
+
+## Leer el ICMM
+```{r}
+icmm <- read_excel("../raw/icmm_2020/base_datos/ENIGH_INGRESOS_2020")
+
+icmm_clean <- icmm %>%
+  filter(!(Estimador %in% c("Error estándar", "Límite inferior de confianza", "Límite superior de confianza", "Coeficiente de variación (%)")) &
+         !grepl("total", Municipio, ignore.case = TRUE))
+View(icmm_clean)
+
+```
+
+## Mapas y shapefile
+```{r}
+Sys.setenv(OGR_GEOMETRY_ACCEPT_UNCLOSED_RING = "NO")
+shapefile = st_read("../raw/shapefiles/SECCION.shp")
+```
+
+## Combinar datos y regresion
+```{r}
+icmm_clean$Municipio <- stri_trans_general(icmm_clean$Municipio, "Latin-ASCII")
+
+icmm_clean$Municipio <- gsub("[^0-9]", "", icmm_clean$Municipio)
+```
+
+
+```{r}
+icmm_clean$combined <- str_c(str_sub(icmm_clean$`Entidad federativa`, 1, 2), str_sub(icmm_clean$Municipio, 1, 3))
+
+icmm_clean$combined <- str_sub(icmm_clean$combined, 2)
+
+names(prom_gastomeds)[names(prom_gastomeds) == "ubica_geo"] <- "combined"
+
+```
+```{r}
+regresion <- merge(prom_gastomeds,icmm_clean,by="combined") 
+
+regresion %>% lm(promedio_gasto ~ `Ingreso Corriente Promedio Trimestral por Hogar 20201`, data = .) %>% summary()
+
+model <- lm(promedio_gasto ~ `Ingreso Corriente Promedio Trimestral por Hogar 20201`, data = regresion)
+
+
+```
+
+```{r}
+ plot(regresion$`Ingreso Corriente Promedio Trimestral por Hogar 20201`, regresion$promedio_gasto, 
+     main = "Regresion", 
+     xlab = "Ingreso Corriente Promedio Trimestral por Hogar 20201", 
+     ylab = "promedio_gasto")
+
+abline(model, col="hotpink")
+
+
+```
+
+```{r}
+png("regesion.png", width = 800, height = 600) 
+```
+
+```{r}
+regresion <- regresion %>%
+    rename(IngresoCorriente = `Ingreso Corriente Promedio Trimestral por Hogar 20201`)
+```
+```{r}
+
+```{r}
+ggplot(regresion, aes(x = `IngresoCorriente`)) +
+  geom_histogram(binwidth = 1000, fill = "pink", color = "black") +
+  labs(title = "Histogram of Ingreso Corriente Promedio Trimestral por Hogar",
+       x = "IngresoCorriente",
+       y = "Frequency")
+
+```
+
+```{r}
+ggplot(regresion, aes(x = IngresoCorriente)) +
+     geom_histogram(binwidth = 1000, fill = "pink", color = "black") +
+     labs(title = "Histogram of Ingreso Corriente",
+          x = "Ingreso Corriente",
+          y = "Frequency")
+```
+```{r}
+names(regresion)
+str(regresion)
+colnames(regresion)
+```
+
+```{r}
+str(regresion)
+
+colnames(regresion)
+
+head(regresion)
+
+
+ggplot(regresion, aes(x = IngresoCorriente, y = promedio_gasto)) +
+  geom_bin2d() +
+  labs(title = "2D Histogram of Ingreso Corriente vs Promedio Gasto",
+       x = "Ingreso Corriente",
+       y = "Promedio Gasto") +
+  scale_fill_gradient(low = "white", high = "pink")
+```
+
+
+``` {R}
+png("histograma_promgastoxingreso.png", width = 800, height = 600)
+```
+
+
+
+
+

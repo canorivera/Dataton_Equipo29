@@ -15,9 +15,19 @@ filter_read = function(filename){
   df = fread(filename) |> janitor::clean_names() |> select(nom_estab, per_ocu, entidad, cve_ent, municipio, cve_mun, localidad, manzana, tipo_vial, latitud, longitud, codigo_act, fecha_alta) |> filter(codigo_act != 464111 & codigo_act != 464112) 
 }
 
-filenames = paste0("C:/Users/luism/Documents/dataton/datos/DENUEs/", 2015:2024, "/conjunto_de_datos/denue_inegi_46321-46531_.csv")
+filenames = paste0("../raw/DENUEs/", 2015:2024, "/conjunto_de_datos/denue_inegi_46321-46531_.csv")
 denues_farm = lapply(filenames, read_and_filter)
 denues_nofarm = lapply(filenames, filter_read)
+for (i in (1:10)) {
+  denues_farm[[i]]$mkey <-  paste(sprintf("%02d", as.numeric(denues_farm[[i]]$cve_ent)),sprintf("%03d", as.numeric(denues_farm[[i]]$cve_mun)),sep="")
+  denues_nofarm[[i]]$mkey <-  paste(sprintf("%02d", as.numeric(denues_nofarm[[i]]$cve_ent)),sprintf("%03d", as.numeric(denues_nofarm[[i]]$cve_mun)),sep="")
+}
+#enigh
+enigh_2020 = read_excel("../raw/icmm_2020/base_datos/ENIGH_ARCHIVO_MAESTRO_2020.xlsx")
+enigh_2020 = rename(enigh_2020, mkey=LLAVE)
+enigh_2020$mkey = sprintf("%05d",as.numeric(enigh_2020$mkey))
+enigh_2020 = enigh_2020 %>%
+  select(mkey,Ingreso)
 
 
 #filtrado
@@ -67,19 +77,14 @@ cierres_filtrado <- cierres  %>%
   filter(!(farm_cerradas == 0 | est_cerrados==0 ))
 
 #plot establecimientos vs farmacias cerradas
-ggplot(cierres, aes(x=est_cerrados, y=farm_cerradas)) +
+ggplot(cierres_filtrado, aes(x=est_cerrados, y=farm_cerradas)) +
   coord_cartesian(ylim = c(0, NA)) +
-  geom_point()   + labs(title = "farmacias cerradas vs establecimientos (excluyendo farmacias) cerrados") +
-  stat_smooth(method = "lm",
-              formula = y ~ x) 
-#enigh
-enigh_2020 = read_excel("C:/Users/luism/Documents/dataton/datos/icmm_2020/base_datos/ENIGH_ARCHIVO_MAESTRO_2020.xlsx")
-enigh_2020 = rename(enigh_2020, mkey=LLAVE)
-enigh_2020$mkey = sprintf("%05d",enigh_2022$ubica_geo)
-enigh_2020 = enigh_2020 %>%
-  select(mkey,Ingreso)
+  geom_point()   + labs(title="Farmacias y establecimientos que llevaban más de 4 años abiertos y cerraron en 2022",
+                        x="Establecimientos (excluyendo farmacias)", y="Farmacias")  +
+  stat_smooth(method = "lm", formula = y ~ x) 
+
 #cercanía a centros de distribución
-farm_dist <- read.csv("C:/Users/luism/Documents/dataton/datos/Farmacias_filtradas50km.csv")
+farm_dist <- read.csv("../output/temp/Farmacias_filtradas50km.csv")
 agg_farm_dist <- farm_dist  %>%
   group_by(cve_ent, cve_mun) %>%
   summarise(farmacias=n())%>%
@@ -94,12 +99,23 @@ intersec_filt <-intersec %>%
 intersec_filt = rename(intersec_filt, num_farmacias = farm_cerradas)
 intersec_filt = intersec_filt %>%
   select(cve_ent, cve_mun, num_farmacias, mkey)
+hist(intersec_filt$cve_ent, )
 
 #generamos los archivos con la lista de farmacias
-farm_final <- cierrecovid[cierrecovid$mkey %in% intersec_filt$mkey]
+farm_final <- cierrecovid_farm[cierrecovid_farm$mkey %in% intersec_filt$mkey]
 farm_final = farm_final %>%
   select(entidad,cve_ent, municipio, cve_mun, latitud, longitud)
+farm_final$entidad[23:59] = "CIUDAD DE MEXICO"
+farm_final$entidad[131:156] = "ESTADO DE MEXICO"
+farm_final$entidad[157] = "MICHOACAN"
+farm_final$entidad[171:179] = "NUEVO LEON"
+farm_final$entidad[222:225] = "YUCATAN"
+farm_final$entidad[215:221] = "VERACRUZ"
 
+
+
+ggplot(farm_final, aes(entidad)) + geom_bar() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) + labs(x=" ", y="Número de Farmacias")
 
 
 

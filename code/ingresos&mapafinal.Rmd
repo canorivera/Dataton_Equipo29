@@ -25,7 +25,7 @@ pacman::p_load(dplyr, tidyr, rvest, ggmap, ggplot2, plotly, htmlwidgets, stringi
 Agrupar la información del promedio del gasto en medicinas agrupado por codigo municipal
 
 ```{r}
-concentradohog <- read.csv("C:/Users/RAM/OneDrive/Escritorio/DATATON/DATATON limpio/ENIGH/conjunto_de_datos_enigh_ns_2022_csv/conjunto_de_datos_concentradohogar_enigh2022_ns/conjunto_de_datos/conjunto_de_datos_concentradohogar_enigh2022_ns.csv")
+concentradohog <- read.csv("../raw/ENIGH/2022/conjunto_de_datos/")
 
 prom_gastomeds <- concentradohog %>%
   group_by(ubica_geo) %>%

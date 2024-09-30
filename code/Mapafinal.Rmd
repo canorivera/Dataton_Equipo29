@@ -1,0 +1,33 @@
+
+
+
+
+## Setup
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+options(scipen = 9999)
+
+if (!require("pacman")) install.packages("pacman", repos = "https://cloud.r-project.org/")
+pacman::p_load(dplyr, tidyr, rvest, ggmap, ggplot2, plotly, htmlwidgets, stringi, RColorBrewer, sf, stringr, readr, readxl)  # Puedes agregar más paquetes aquí
+```
+
+## Mapa de farmacias final 
+```{r}
+lista_farm <- read.csv(../output/temp/lista_farm.csv)
+```
+```{r}
+shapefile_data <- st_read("../raw/shapefiles/SECCION.shp")
+```
+
+```{r}
+
+mapa_farm <- ggplot() +
+  geom_sf(data = shapefile_data, fill = "white", color = "black") +  # Mapa base del shapefile
+  geom_point(data = lista_farm, aes(x = longitud, y = latitud), color = "red", size = 0.1, alpha = 0.7) labs(title = "Farmacias", x = "Longitud", y = "Latitud")
+
+ggsave("../output/graphs/mapafinal.png)
+
+```
+
+

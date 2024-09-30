@@ -5,7 +5,7 @@ date: "2024-09-29"
 output: html_document
 ---
 
-En este documento encontramos la tasa de supervivencia año con año de otros comercios no minoristas 
+En este documento encontramos la tasa de supervivencia año con año de otros comercios no minoristas. Con esto verificamos que el efcto es sistemático sobre los comercios minoristas (por la pandemia) y no solo de las farmacias
 
 ``` {R}
 # Desactivamos la notación científica

@@ -1,6 +1,4 @@
-
-
-
+En este codigo generamos el mapa final donde se muestran las ubicaciones
 
 ## Setup
 ```{r setup, include=FALSE}
@@ -14,19 +12,17 @@ pacman::p_load(dplyr, tidyr, rvest, ggmap, ggplot2, plotly, htmlwidgets, stringi
 
 ## Mapa de farmacias final 
 ```{r}
-lista_farm <- read.csv(../output/temp/lista_farm.csv)
-```
-```{r}
+lista_farm <- read.csv('../output/temp/lista_farm.csv')
 shapefile_data <- st_read("../raw/shapefiles/SECCION.shp")
 ```
 
 ```{r}
+mapa_farm = ggplot() +
+  geom_sf(data = shapefile_data, fill = "white", color = "black") +
+  geom_point(data = lista_farm, aes(x = longitud, y = latitud), color = "red", size = 0.1, alpha = 0.7)+
+  labs(title = "Farmacias", x = "Longitud", y = "Latitud")
 
-mapa_farm <- ggplot() +
-  geom_sf(data = shapefile_data, fill = "white", color = "black") +  # Mapa base del shapefile
-  geom_point(data = lista_farm, aes(x = longitud, y = latitud), color = "red", size = 0.1, alpha = 0.7) labs(title = "Farmacias", x = "Longitud", y = "Latitud")
-
-ggsave("../output/graphs/mapafinal.png)
+ggsave("../output/graphs/mapafinal.png", plot = mapa_farm)
 
 ```
 
